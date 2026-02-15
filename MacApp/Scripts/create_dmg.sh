@@ -12,9 +12,9 @@ MACAPP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 APP_PATH="${1:-}"
 OUTPUT_DIR="${2:-$MACAPP_DIR/build}"
-APP_NAME="7-Zip"
-DMG_NAME="7-Zip-Mac"
-VOLUME_NAME="7-Zip"
+APP_NAME="SeptaZip"
+DMG_NAME="SeptaZip"
+VOLUME_NAME="SeptaZip"
 
 # ── Locate the .app bundle ───────────────────────────────────────
 
@@ -22,7 +22,7 @@ if [ -z "$APP_PATH" ]; then
     # Try common locations
     for candidate in \
         "$MACAPP_DIR/build/Build/Products/Release/$APP_NAME.app" \
-        "$MACAPP_DIR/build/archive/SevenZipMac.xcarchive/Products/Applications/$APP_NAME.app" \
+        "$MACAPP_DIR/build/archive/$APP_NAME.xcarchive/Products/Applications/$APP_NAME.app" \
         "$MACAPP_DIR/build/Release/$APP_NAME.app"; do
         if [ -d "$candidate" ]; then
             APP_PATH="$candidate"
@@ -84,4 +84,7 @@ echo "=== DMG created ==="
 echo "File: $DMG_PATH"
 echo "Size: $(du -h "$DMG_PATH" | cut -f1)"
 echo ""
-echo "To install: open the DMG and drag 7-Zip to Applications."
+echo "To install: open the DMG and drag SeptaZip to Applications."
+echo ""
+echo "To remove Gatekeeper quarantine:"
+echo "  xattr -d com.apple.quarantine \"$DMG_PATH\""

@@ -1,10 +1,10 @@
-# 7-Zip for Mac
+# SeptaZip
 
-A native macOS app for [7-Zip](https://7-zip.org), built with SwiftUI for Apple Silicon and Intel Macs. Includes Finder right-click integration, an archive browser, and support for 40+ archive formats.
+A native macOS app for [7-Zip](https://7-zip.org), built with SwiftUI for Apple Silicon and Intel Macs. **SeptaZip** (Sept = seven in Latin) provides Finder right-click integration, an archive browser, and support for 40+ archive formats.
 
 ## Download
 
-Grab the latest DMG from the [Releases](../../releases) page, open it, and drag **7-Zip** into your Applications folder.
+Grab the latest DMG from the [Releases](../../releases) page, open it, and drag **SeptaZip** into your Applications folder.
 
 ## Features
 
@@ -58,7 +58,12 @@ cd MacApp
 make dmg        # Builds release archive, then packages into a DMG
 ```
 
-The DMG will be at `MacApp/build/7-Zip-Mac-<version>.dmg`.
+The DMG will be at `MacApp/build/SeptaZip-<version>.dmg`.
+
+**Fixing "Damaged DMG" errors:** macOS adds quarantine attributes that trigger Gatekeeper warnings. Remove them with:
+```bash
+xattr -d com.apple.quarantine build/SeptaZip-*.dmg
+```
 
 ### Publishing a Release
 
@@ -66,11 +71,17 @@ The DMG will be at `MacApp/build/7-Zip-Mac-<version>.dmg`.
    ```bash
    cd MacApp && make dmg
    ```
-2. Create a GitHub release:
+
+2. Remove Gatekeeper quarantine from the DMG:
    ```bash
-   gh release create v26.00 build/7-Zip-Mac-26.0.dmg \
-     --title "7-Zip for Mac v26.00" \
-     --notes "Native macOS app for 7-Zip."
+   xattr -d com.apple.quarantine build/SeptaZip-*.dmg
+   ```
+
+3. Create a GitHub release:
+   ```bash
+   gh release create v26.00 build/SeptaZip-26.0.dmg \
+     --title "SeptaZip v26.00" \
+     --notes "Native macOS app for 7-Zip compression."
    ```
 
 ## Make Targets
@@ -101,19 +112,32 @@ cd MacApp
 
 ```
 MacApp/
-  project.yml          # XcodeGen spec (generates .xcodeproj)
-  Makefile             # Build commands
+  project.yml                   # XcodeGen spec (generates .xcodeproj)
+  Makefile                      # Build commands
   Scripts/
-    build_7zz.sh       # Compile 7zz from source
-    create_dmg.sh      # Package .app into DMG
-    setup.sh           # Dev environment setup
-    generate-icons.sh  # Generate app icons
-  SevenZipMac/         # Main app (SwiftUI)
-  FinderExtension/     # Finder right-click menu plugin
-  QuickActions/        # Standalone Finder Quick Actions
+    build_7zz.sh                # Compile 7zz from source
+    create_dmg.sh               # Package .app into DMG
+    setup.sh                    # Dev environment setup
+    generate-septazip-icon.sh   # Generate SeptaZip app icon
+  SevenZipMac/                  # Main app (SwiftUI)
+  FinderExtension/              # Finder right-click menu plugin
+  QuickActions/                 # Standalone Finder Quick Actions
 ```
+
+## Generating the App Icon
+
+To regenerate the SeptaZip icon:
+
+```bash
+cd MacApp
+./Scripts/generate-septazip-icon.sh
+```
+
+This creates a modern macOS squircle icon with a metallic 'S' that subtly forms the number '7', set against a deep navy blue background with silver zipper teeth.
 
 ## License
 
 7-Zip is Copyright (C) Igor Pavlov, licensed under the GNU LGPL.
 See [DOC/License.txt](DOC/License.txt) for details.
+
+**SeptaZip** is a macOS wrapper/frontend for 7-Zip and follows the same license.

@@ -16,10 +16,11 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
-SCHEME := SevenZipMac
-PROJECT := SevenZipMac.xcodeproj
+SCHEME := SeptaZip
+PROJECT := SeptaZip.xcodeproj
 BUILD_DIR := build
 ARCH := arm64
+APP_NAME := SeptaZip
 
 # ── Setup ────────────────────────────────────────────────────────
 
@@ -81,7 +82,7 @@ run: build ## Build and run the app
 	@APP_PATH=$$(xcodebuild -project $(PROJECT) -scheme $(SCHEME) \
 		-configuration Debug -showBuildSettings 2>/dev/null \
 		| grep " BUILT_PRODUCTS_DIR" | head -1 | awk '{print $$NF}') ; \
-	open "$$APP_PATH/7-Zip.app"
+	open "$$APP_PATH/$(APP_NAME).app"
 
 # ── Archive ──────────────────────────────────────────────────────
 
@@ -93,9 +94,9 @@ archive: ## Create release archive
 		-project $(PROJECT) \
 		-scheme $(SCHEME) \
 		-configuration Release \
-		-archivePath $(BUILD_DIR)/archive/SevenZipMac.xcarchive \
+		-archivePath $(BUILD_DIR)/archive/$(APP_NAME).xcarchive \
 		-arch $(ARCH)
-	@echo "Archive created at $(BUILD_DIR)/archive/SevenZipMac.xcarchive"
+	@echo "Archive created at $(BUILD_DIR)/archive/$(APP_NAME).xcarchive"
 
 # ── DMG Installer ───────────────────────────────────────────────
 
@@ -105,13 +106,13 @@ dmg: build-release ## Create DMG installer for distribution
 	@APP_PATH=$$(xcodebuild -project $(PROJECT) -scheme $(SCHEME) \
 		-configuration Release -showBuildSettings 2>/dev/null \
 		| grep " BUILT_PRODUCTS_DIR" | head -1 | awk '{print $$NF}') ; \
-	./Scripts/create_dmg.sh "$$APP_PATH/7-Zip.app" $(BUILD_DIR)
+	./Scripts/create_dmg.sh "$$APP_PATH/$(APP_NAME).app" $(BUILD_DIR)
 
 .PHONY: dmg-from-archive
 dmg-from-archive: archive ## Create DMG from xcarchive (requires full Xcode)
 	@echo "=== Creating DMG from archive ==="
 	./Scripts/create_dmg.sh \
-		"$(BUILD_DIR)/archive/SevenZipMac.xcarchive/Products/Applications/7-Zip.app" \
+		"$(BUILD_DIR)/archive/$(APP_NAME).xcarchive/Products/Applications/$(APP_NAME).app" \
 		$(BUILD_DIR)
 
 # ── Quick Actions ────────────────────────────────────────────────

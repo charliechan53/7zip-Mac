@@ -5,7 +5,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>7-Zip</string>
+    <string>SeptaZip</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIconFile</key>
@@ -17,7 +17,7 @@
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>7-Zip</string>
+    <string>SeptaZip</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -29,7 +29,7 @@
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>NSHumanReadableCopyright</key>
-    <string>Copyright © 2024 Igor Pavlov. GNU LGPL License.</string>
+    <string>Copyright © 2024 Igor Pavlov. GNU LGPL License. SeptaZip is a macOS frontend for 7-Zip.</string>
     <key>NSMainStoryboardFile</key>
     <string></string>
     <key>NSSupportsAutomaticTermination</key>
