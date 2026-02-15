@@ -28,6 +28,7 @@ class ServiceProvider: NSObject {
     }
 
     /// Called when user selects "Extract with 7-Zip" from Finder context menu.
+    @MainActor
     @objc func extractFiles(
         _ pboard: NSPasteboard,
         userData: String,

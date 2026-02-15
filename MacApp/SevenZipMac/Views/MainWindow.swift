@@ -261,7 +261,7 @@ struct MainWindow: View {
     // MARK: - Archive Browser
 
     private var archiveBrowserView: some View {
-        Table(filteredItems, selection: $selectedItems, sortOrder: .constant([])) {
+        Table(filteredItems, selection: $selectedItems) {
             TableColumn("Name") { item in
                 HStack(spacing: 6) {
                     Image(systemName: item.iconName)
