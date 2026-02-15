@@ -7,6 +7,7 @@
 #   make build      - Build the app using xcodebuild
 #   make run        - Build and run the app
 #   make archive    - Create a release archive (.app bundle)
+#   make dmg        - Create a DMG installer for distribution
 #   make install-qa - Install Finder Quick Actions
 #   make clean      - Clean build artifacts
 #   make help       - Show this help
@@ -95,6 +96,15 @@ archive: ## Create release archive
 		-archivePath $(BUILD_DIR)/archive/SevenZipMac.xcarchive \
 		-arch $(ARCH)
 	@echo "Archive created at $(BUILD_DIR)/archive/SevenZipMac.xcarchive"
+
+# ── DMG Installer ───────────────────────────────────────────────
+
+.PHONY: dmg
+dmg: archive ## Create DMG installer for distribution
+	@echo "=== Creating DMG ==="
+	./Scripts/create_dmg.sh \
+		"$(BUILD_DIR)/archive/SevenZipMac.xcarchive/Products/Applications/7-Zip.app" \
+		$(BUILD_DIR)
 
 # ── Quick Actions ────────────────────────────────────────────────
 
