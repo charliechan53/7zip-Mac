@@ -15,13 +15,15 @@ BUNDLES_DIR="$ROOT_DIR/CPP/7zip/Bundles/Alone2"
 ARCH="${1:-arm64}"
 OUTPUT_DIR="${2:-$SCRIPT_DIR/../build}"
 
+# Resolve to absolute path before any cd operations
+mkdir -p "$OUTPUT_DIR"
+OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
+
 echo "=== Building 7zz for macOS ==="
 echo "Architecture: $ARCH"
 echo "Source root:  $ROOT_DIR"
 echo "Output dir:   $OUTPUT_DIR"
 echo ""
-
-mkdir -p "$OUTPUT_DIR"
 
 build_arch() {
     local arch="$1"
@@ -65,19 +67,16 @@ build_arch() {
 case "$ARCH" in
     arm64)
         build_arch "arm64"
-        mkdir -p "$OUTPUT_DIR"
         cp "$BUNDLES_DIR/b/mac_arm64/7zz" "$OUTPUT_DIR/7zz"
         ;;
     x64)
         build_arch "x86_64"
-        mkdir -p "$OUTPUT_DIR"
         cp "$BUNDLES_DIR/b/mac_x86_64/7zz" "$OUTPUT_DIR/7zz"
         ;;
     universal)
         build_arch "arm64"
         build_arch "x86_64"
         echo "--- Creating universal binary ---"
-        mkdir -p "$OUTPUT_DIR"
         lipo -create \
             "$BUNDLES_DIR/b/mac_arm64/7zz" \
             "$BUNDLES_DIR/b/mac_x86_64/7zz" \
