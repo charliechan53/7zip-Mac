@@ -1,25 +1,33 @@
 import Cocoa
 import SwiftUI
+import UserNotifications
 
 class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let serviceProvider = ServiceProvider()
     private let actionPasteboardName = NSPasteboard.Name("com.septazip.action")
+    private let actionPasteboardType = NSPasteboard.PasteboardType("com.septazip.action.payload")
+    private let actionNotificationName = Notification.Name("com.septazip.finder-action-posted")
     private let archiveExtensions: Set<String> = [
         "7z", "zip", "rar", "tar", "gz", "bz2", "xz", "zst",
         "iso", "dmg", "wim", "cab", "arj", "lzh", "lzma",
         "rpm", "deb", "cpio", "cramfs", "squashfs", "vhd",
         "vhdx", "vmdk", "qcow", "qcow2", "vdi"
     ]
+    private var consumedActionIDs: [String: Date] = [:]
 
     private struct FinderActionPayload: Codable {
+        let id: String?
+        let createdAt: Date?
         let action: String
-        let files: String
+        let files: [String]
+        let format: String?
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Register Services (Quick Actions) for Finder right-click menu
         NSApp.servicesProvider = serviceProvider
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
 
         // Register as handler for archive file types
         NSAppleEventManager.shared().setEventHandler(
@@ -28,6 +36,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             forEventClass: AEEventClass(kCoreEventClass),
             andEventID: AEEventID(kAEOpenDocuments)
         )
+
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(handleFinderActionNotification(_:)),
+            name: actionNotificationName,
+            object: nil
+        )
+
+        consumePendingFinderActionsIfNeeded()
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        consumePendingFinderActionsIfNeeded()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -52,6 +73,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         handleIncoming(urls: urls)
     }
 
+    @objc private func handleFinderActionNotification(_ notification: Notification) {
+        if let action = action(from: notification) {
+            Task { @MainActor in
+                route(action)
+            }
+            return
+        }
+        consumePendingFinderActionsIfNeeded()
+    }
+
     private func openArchive(at path: String) {
         NotificationCenter.default.post(
             name: .openArchive,
@@ -61,13 +92,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleIncoming(urls: [URL]) {
         guard !urls.isEmpty else { return }
-
-        if let action = actionFromPasteboard(for: urls) {
-            Task { @MainActor in
-                AppActionRouter.shared.dispatch(action)
-            }
-            return
-        }
 
         if let archiveURL = urls.first(where: isArchiveURL(_:)) {
             openArchive(at: archiveURL.path)
@@ -79,38 +103,135 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func actionFromPasteboard(for urls: [URL]) -> AppOpenAction? {
+    private func consumePendingFinderActionsIfNeeded() {
+        let actions = consumeQueuedFinderActions()
+        guard !actions.isEmpty else { return }
+
+        Task { @MainActor in
+            for action in actions {
+                route(action)
+            }
+        }
+    }
+
+    @MainActor
+    private func route(_ action: AppOpenAction) {
+        if !BackgroundArchiveJobManager.shared.handle(action) {
+            AppActionRouter.shared.dispatch(action)
+        }
+    }
+
+    private func consumeQueuedFinderActions() -> [AppOpenAction] {
+        let payloads = readFinderActionPayloads()
+        guard !payloads.isEmpty else { return [] }
+
+        clearFinderActionPasteboard()
+        pruneConsumedActionIDs()
+        return payloads.compactMap { payload in
+            guard shouldConsume(payload) else { return nil }
+            return action(from: payload)
+        }
+    }
+
+    private func readFinderActionPayloads() -> [FinderActionPayload] {
         let pasteboard = NSPasteboard(name: actionPasteboardName)
-        guard let data = pasteboard.data(forType: .string),
-              let payload = try? JSONDecoder().decode(FinderActionPayload.self, from: data) else {
-            return nil
+
+        if let data = pasteboard.data(forType: actionPasteboardType),
+           let payloads = decodeFinderActionPayloads(from: data) {
+            return payloads.filter { payload in
+                guard let createdAt = payload.createdAt else { return true }
+                return Date().timeIntervalSince(createdAt) <= 60
+            }
         }
 
-        let incomingPaths = urls.map(\.path)
-        let payloadPaths = payload.files
-            .split(separator: "\n")
-            .map(String.init)
-
-        guard !payloadPaths.isEmpty, Set(incomingPaths) == Set(payloadPaths) else {
-            return nil
+        if let data = pasteboard.data(forType: .string),
+           let legacyPayload = try? JSONDecoder().decode(LegacyFinderActionPayload.self, from: data) {
+            return [FinderActionPayload(
+                id: UUID().uuidString,
+                createdAt: Date(),
+                action: legacyPayload.action,
+                files: legacyPayload.files
+                    .split(separator: "\n")
+                    .map(String.init),
+                format: nil
+            )]
         }
 
-        pasteboard.clearContents()
+        return []
+    }
+
+    private func decodeFinderActionPayloads(from data: Data) -> [FinderActionPayload]? {
+        if let payloads = try? JSONDecoder().decode([FinderActionPayload].self, from: data) {
+            return payloads
+        }
+
+        if let payload = try? JSONDecoder().decode(FinderActionPayload.self, from: data) {
+            return [payload]
+        }
+
+        return nil
+    }
+
+    private func action(from notification: Notification) -> AppOpenAction? {
+        guard let userInfo = notification.userInfo else { return nil }
+
+        let payload = FinderActionPayload(
+            id: userInfo["id"] as? String,
+            createdAt: (userInfo["createdAt"] as? TimeInterval).map(Date.init(timeIntervalSince1970:)),
+            action: userInfo["action"] as? String ?? "",
+            files: userInfo["files"] as? [String] ?? [],
+            format: userInfo["format"] as? String
+        )
+
+        guard shouldConsume(payload) else { return nil }
+        return action(from: payload)
+    }
+
+    private func shouldConsume(_ payload: FinderActionPayload) -> Bool {
+        if let createdAt = payload.createdAt,
+           Date().timeIntervalSince(createdAt) > 60 {
+            return false
+        }
+
+        if let id = payload.id {
+            pruneConsumedActionIDs()
+            if consumedActionIDs[id] != nil {
+                return false
+            }
+            consumedActionIDs[id] = Date()
+        }
+
+        return true
+    }
+
+    private func pruneConsumedActionIDs() {
+        let expirationInterval: TimeInterval = 120
+        consumedActionIDs = consumedActionIDs.filter { _, timestamp in
+            Date().timeIntervalSince(timestamp) <= expirationInterval
+        }
+    }
+
+    private func action(from payload: FinderActionPayload) -> AppOpenAction? {
+        let urls = payload.files.map { URL(fileURLWithPath: $0) }
+        guard !urls.isEmpty else { return nil }
 
         switch payload.action {
         case "compress":
             return .compressFiles(urls)
+        case "compressDirect":
+            guard let format = archiveFormat(from: payload.format) else { return nil }
+            return .quickCompress(urls, format)
         case "extract":
-            if let archiveURL = urls.first(where: isArchiveURL(_:)) {
-                return .extractArchive(archiveURL.path)
-            }
+            return .extractArchives(urls.filter { !$0.hasDirectoryPath }, .prompt)
+        case "extractHere":
+            return .extractArchives(urls.filter { !$0.hasDirectoryPath }, .sameFolder)
+        case "extractToSubfolder":
+            return .extractArchives(urls.filter { !$0.hasDirectoryPath }, .subfolder)
         case "test":
-            if let archiveURL = urls.first(where: isArchiveURL(_:)) {
-                return .testArchive(archiveURL.path)
-            }
+            return .testArchives(urls.filter { !$0.hasDirectoryPath })
         case "open":
-            if let archiveURL = urls.first(where: isArchiveURL(_:)) {
-                return .openArchive(archiveURL.path)
+            if let firstFileURL = urls.first(where: { !$0.hasDirectoryPath }) {
+                return .openArchive(firstFileURL)
             }
         default:
             break
@@ -119,7 +240,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return nil
     }
 
+    private func archiveFormat(from rawFormat: String?) -> ArchiveFormat? {
+        switch rawFormat {
+        case "7z":
+            return .sevenZ
+        case "zip":
+            return .zip
+        case "tar.gz":
+            return .gzip
+        case "tar.xz":
+            return .xz
+        default:
+            return nil
+        }
+    }
+
+    private func clearFinderActionPasteboard() {
+        NSPasteboard(name: actionPasteboardName).clearContents()
+    }
+
     private func isArchiveURL(_ url: URL) -> Bool {
         archiveExtensions.contains(url.pathExtension.lowercased())
     }
+}
+
+private struct LegacyFinderActionPayload: Codable {
+    let action: String
+    let files: String
 }

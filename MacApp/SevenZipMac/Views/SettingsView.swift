@@ -8,7 +8,6 @@ struct SettingsView: View {
     @AppStorage("extractToSubfolder") private var extractToSubfolder = true
     @AppStorage("openAfterExtract") private var openAfterExtract = true
     @AppStorage("deleteAfterExtract") private var deleteAfterExtract = false
-    @AppStorage("showFinderExtension") private var showFinderExtension = true
 
     private let upstreamURL = URL(string: "https://github.com/ip7z/7zip")!
     private let githubReleasesURL = URL(string: "https://github.com/ip7z/7zip/releases")!
@@ -237,15 +236,16 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 18) {
                 settingsCard(
                     title: "Finder Menu",
-                    subtitle: "SeptaZip already supports Finder right-click actions similar to Windows 7-Zip."
+                    subtitle: "macOS keeps Finder Sync extensions disabled until the user enables them manually."
                 ) {
                     VStack(alignment: .leading, spacing: 12) {
-                        Toggle("Show in Finder context menu", isOn: $showFinderExtension)
-
-                        Text("Current menu set: Extract Here, Extract to Subfolder, Extract to..., Open with 7-Zip, Test Archive, and Compress with 7-Zip.")
+                        Text("SeptaZip cannot directly turn the Finder extension on or off from inside the app. The app can only send you to the system Extensions screen.")
                             .foregroundColor(.secondary)
 
-                        Button("Open Finder Extensions Settings") {
+                        Text("Current menu set: Decompress with 7-Zip, Open with 7-Zip, Test Archive, and Compress with 7-Zip.")
+                            .foregroundColor(.secondary)
+
+                        Button("Enable Finder Extension in System Settings") {
                             NSWorkspace.shared.open(finderExtensionsURL)
                         }
                         .buttonStyle(.borderedProminent)
@@ -254,7 +254,7 @@ struct SettingsView: View {
 
                 settingsCard(
                     title: "Manual Setup",
-                    subtitle: "Finder Sync must be enabled once in macOS before the menu appears."
+                    subtitle: "On a fresh install, this stays off until the user explicitly enables it in macOS."
                 ) {
                     VStack(alignment: .leading, spacing: 8) {
                         settingsStep("1. Open System Settings.")
@@ -273,8 +273,8 @@ struct SettingsView: View {
 
     private var appVersionText: String {
         let info = Bundle.main.infoDictionary ?? [:]
-        let shortVersion = info["CFBundleShortVersionString"] as? String ?? "1.0"
-        let build = info["CFBundleVersion"] as? String ?? "1"
+        let shortVersion = info["CFBundleShortVersionString"] as? String ?? "1.2"
+        let build = info["CFBundleVersion"] as? String ?? "12"
         return "App \(shortVersion) (\(build))"
     }
 

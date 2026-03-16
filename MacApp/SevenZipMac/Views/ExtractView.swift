@@ -50,96 +50,115 @@ struct ExtractView: View {
 
             Divider()
 
-            VStack(alignment: .leading, spacing: 20) {
-                // Archive info
-                GroupBox("Archive") {
-                    HStack {
-                        Image(systemName: "doc.zipper")
-                            .foregroundColor(.accentColor)
-                        VStack(alignment: .leading) {
-                            Text(URL(fileURLWithPath: archivePath).lastPathComponent)
-                                .fontWeight(.medium)
-                            Text(archivePath)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.head)
-                        }
-                        Spacer()
-                        if let info = archiveManager.archiveInfo {
-                            VStack(alignment: .trailing) {
-                                Text("\(info.totalFiles) files")
-                                    .font(.caption)
-                                Text(info.formattedTotalSize)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // Archive info
+                    GroupBox("Archive") {
+                        HStack(alignment: .top) {
+                            Image(systemName: "doc.zipper")
+                                .foregroundColor(.accentColor)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(URL(fileURLWithPath: archivePath).lastPathComponent)
+                                    .fontWeight(.medium)
+                                Text(archivePath)
                                     .font(.caption)
                                     .foregroundColor(.secondary)
+                                    .textSelection(.enabled)
+                                    .lineLimit(2)
+                                    .truncationMode(.middle)
                             }
-                        }
-                    }
-                    .padding(8)
-                }
-
-                // Destination
-                GroupBox("Extract to") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Picker("", selection: $extractMode) {
-                            ForEach(ExtractMode.allCases, id: \.rawValue) { mode in
-                                Text(mode.rawValue).tag(mode)
-                            }
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.radioGroup)
-                        .onChange(of: extractMode) { newValue in
-                            updateDestination(mode: newValue)
-                        }
-
-                        if extractMode == .chooseFolder || !destinationPath.isEmpty {
-                            HStack {
-                                TextField("Destination", text: $destinationPath)
-                                    .textFieldStyle(.roundedBorder)
-                                Button("Browse...") {
-                                    chooseFolderPanel()
+                            Spacer()
+                            if let info = archiveManager.archiveInfo {
+                                VStack(alignment: .trailing) {
+                                    Text("\(info.totalFiles) files")
+                                        .font(.caption)
+                                    Text(info.formattedTotalSize)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
                                 }
                             }
                         }
+                        .padding(8)
+                    }
 
-                        HStack {
-                            Text("If file exists:")
-                            Picker("", selection: $overwriteMode) {
-                                Text("Overwrite").tag(OverwriteMode.overwrite)
-                                Text("Skip").tag(OverwriteMode.skip)
+                    // Destination
+                    GroupBox("Extract to") {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Picker("", selection: $extractMode) {
+                                ForEach(ExtractMode.allCases, id: \.rawValue) { mode in
+                                    Text(mode.rawValue).tag(mode)
+                                }
+                            }
+                            HStack {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("Location")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    TextField("Destination", text: $destinationPath)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+                                Button("Browse...") {
+                                    chooseFolderPanel()
+                                }
+                                .controlSize(.large)
+                                .padding(.top, 18)
                             }
                             .labelsHidden()
-                            .frame(width: 150)
+                            .pickerStyle(.radioGroup)
+                            .onChange(of: extractMode) { newValue in
+                                updateDestination(mode: newValue)
+                            }
+
+                            HStack {
+                                Text("If file exists:")
+                                Picker("", selection: $overwriteMode) {
+                                    Text("Overwrite").tag(OverwriteMode.overwrite)
+                                    Text("Skip").tag(OverwriteMode.skip)
+                                }
+                                .labelsHidden()
+                                .frame(width: 150)
+                            }
                         }
+                        .padding(8)
                     }
-                    .padding(8)
-                }
 
-                // Password
-                GroupBox("Password (if encrypted)") {
-                    HStack {
-                        SecureField("Enter password", text: $password)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(maxWidth: 250)
-                        Spacer()
+                    // Password
+                    GroupBox("Password (if encrypted)") {
+                        HStack {
+                            SecureField("Enter password", text: $password)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(maxWidth: 250)
+                            Spacer()
+                        }
+                        .padding(8)
                     }
-                    .padding(8)
                 }
+                .padding()
             }
-            .padding()
-
-            Spacer()
 
             Divider()
 
             // Action buttons
             HStack {
                 if isExtracting {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                    Text("Extracting...")
-                        .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 6) {
+                        if let progress = archiveManager.progress {
+                            ProgressView(value: progress.percentage, total: 100)
+                                .frame(width: 180)
+                            Text("Extracting... \(Int(progress.percentage.rounded()))%")
+                                .foregroundColor(.secondary)
+                            Text(progress.currentFile)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        } else {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                            Text("Extracting...")
+                                .foregroundColor(.secondary)
+                        }
+                    }
                 }
 
                 Spacer()
@@ -161,7 +180,7 @@ struct ExtractView: View {
             }
             .padding()
         }
-        .frame(width: 500, height: 450)
+        .frame(minWidth: 560, idealWidth: 560, minHeight: 520, idealHeight: 560)
         .onAppear {
             updateDestination(mode: extractMode)
         }

@@ -36,6 +36,38 @@ struct ArchiveProgress {
     let bytesTotal: UInt64
 }
 
+enum ArchiveOperationKind: Equatable {
+    case idle
+    case listing
+    case extracting
+    case compressing
+    case testing
+
+    var title: String {
+        switch self {
+        case .idle:
+            return "Ready"
+        case .listing:
+            return "Loading Archive"
+        case .extracting:
+            return "Extracting"
+        case .compressing:
+            return "Compressing"
+        case .testing:
+            return "Testing"
+        }
+    }
+
+    var supportsProgress: Bool {
+        switch self {
+        case .extracting, .compressing, .testing:
+            return true
+        case .idle, .listing:
+            return false
+        }
+    }
+}
+
 /// Runtime details for the bundled 7-Zip engine.
 struct EngineDetails: Equatable {
     let versionNumber: String
@@ -123,6 +155,8 @@ class ArchiveManager: ObservableObject {
     @Published var engineDetails: EngineDetails?
     @Published var engineDetailsError: String?
     @Published var isLoadingEngineDetails = false
+    @Published private(set) var currentOperationKind: ArchiveOperationKind = .idle
+    @Published private(set) var currentOperationTitle = "Ready"
 
     private var currentProcess: Process?
 
@@ -203,9 +237,9 @@ class ArchiveManager: ObservableObject {
 
     /// List all items in an archive.
     func listArchive(at path: String, password: String? = nil) async throws {
-        isLoading = true
+        beginOperation(.listing, title: "Loading \(URL(fileURLWithPath: path).lastPathComponent)")
         error = nil
-        defer { isLoading = false }
+        defer { finishOperation() }
 
         var args = ["l", "-slt"]
         if let password = password {
@@ -225,11 +259,11 @@ class ArchiveManager: ObservableObject {
     /// Extract all files from an archive to a destination directory.
     func extract(archive: String, to destination: String, password: String? = nil,
                  overwrite: Bool = true) async throws {
-        isLoading = true
+        beginOperation(.extracting, title: "Extracting \(URL(fileURLWithPath: archive).lastPathComponent)")
         error = nil
-        defer { isLoading = false }
+        defer { finishOperation() }
 
-        var args = ["x"]
+        var args = ["x", "-bsp1", "-bb1"]
         if overwrite {
             args.append("-aoa") // overwrite all
         } else {
@@ -247,11 +281,11 @@ class ArchiveManager: ObservableObject {
     /// Extract specific files from an archive.
     func extractFiles(archive: String, files: [String], to destination: String,
                       password: String? = nil) async throws {
-        isLoading = true
+        beginOperation(.extracting, title: "Extracting \(URL(fileURLWithPath: archive).lastPathComponent)")
         error = nil
-        defer { isLoading = false }
+        defer { finishOperation() }
 
-        var args = ["x", "-o\(destination)"]
+        var args = ["x", "-bsp1", "-bb1", "-o\(destination)"]
         if let password = password {
             args.append("-p\(password)")
         }
@@ -280,11 +314,11 @@ class ArchiveManager: ObservableObject {
                   level: CompressionLevel = .normal,
                   password: String? = nil,
                   encrypt: Bool = false) async throws {
-        isLoading = true
+        beginOperation(.compressing, title: "Compressing \(URL(fileURLWithPath: archivePath).lastPathComponent)")
         error = nil
-        defer { isLoading = false }
+        defer { finishOperation() }
 
-        var args = ["a"]
+        var args = ["a", "-bsp1", "-bb1"]
         args.append("-t\(format.typeFlag)")
         args.append("-mx=\(level.rawValue)")
 
@@ -305,11 +339,11 @@ class ArchiveManager: ObservableObject {
 
     /// Test archive integrity.
     func testArchive(at path: String, password: String? = nil) async throws -> Bool {
-        isLoading = true
+        beginOperation(.testing, title: "Testing \(URL(fileURLWithPath: path).lastPathComponent)")
         error = nil
-        defer { isLoading = false }
+        defer { finishOperation() }
 
-        var args = ["t"]
+        var args = ["t", "-bsp1", "-bb1"]
         if let password = password {
             args.append("-p\(password)")
         }
@@ -325,7 +359,7 @@ class ArchiveManager: ObservableObject {
     func cancel() {
         currentProcess?.terminate()
         currentProcess = nil
-        isLoading = false
+        finishOperation()
         error = .cancelled
     }
 
@@ -367,6 +401,9 @@ class ArchiveManager: ObservableObject {
                 lock.lock()
                 outputData.append(chunk)
                 lock.unlock()
+                Task { @MainActor [weak self] in
+                    self?.handleProgressChunk(chunk)
+                }
             }
 
             errorHandle.readabilityHandler = { handle in
@@ -375,6 +412,9 @@ class ArchiveManager: ObservableObject {
                 lock.lock()
                 errorData.append(chunk)
                 lock.unlock()
+                Task { @MainActor [weak self] in
+                    self?.handleProgressChunk(chunk)
+                }
             }
 
             process.terminationHandler = { [weak self] proc in
@@ -421,6 +461,104 @@ class ArchiveManager: ObservableObject {
                 continuation.resume(throwing: ArchiveError.operationFailed(error.localizedDescription))
             }
         }
+    }
+
+    private func beginOperation(_ kind: ArchiveOperationKind, title: String) {
+        currentOperationKind = kind
+        currentOperationTitle = title
+        isLoading = true
+
+        if kind.supportsProgress {
+            progress = ArchiveProgress(
+                percentage: 0,
+                currentFile: "Preparing...",
+                bytesProcessed: 0,
+                bytesTotal: 0
+            )
+        } else {
+            progress = nil
+        }
+    }
+
+    private func finishOperation() {
+        isLoading = false
+        currentOperationKind = .idle
+        currentOperationTitle = "Ready"
+        progress = nil
+    }
+
+    private func handleProgressChunk(_ chunk: Data) {
+        guard currentOperationKind.supportsProgress,
+              let rawChunk = String(data: chunk, encoding: .utf8),
+              !rawChunk.isEmpty else {
+            return
+        }
+
+        let percentage = Self.parseProgressPercentage(from: rawChunk)
+        let currentFile = Self.parseCurrentFile(from: rawChunk)
+
+        guard percentage != nil || currentFile != nil else { return }
+
+        Task { @MainActor in
+            let existingProgress = self.progress ?? ArchiveProgress(
+                percentage: 0,
+                currentFile: "Preparing...",
+                bytesProcessed: 0,
+                bytesTotal: 0
+            )
+
+            self.progress = ArchiveProgress(
+                percentage: percentage ?? existingProgress.percentage,
+                currentFile: currentFile ?? existingProgress.currentFile,
+                bytesProcessed: existingProgress.bytesProcessed,
+                bytesTotal: existingProgress.bytesTotal
+            )
+        }
+    }
+
+    private static func parseProgressPercentage(from rawChunk: String) -> Double? {
+        let pattern = #"(?<!\d)(100|[1-9]?\d)%"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return nil
+        }
+
+        let range = NSRange(rawChunk.startIndex..<rawChunk.endIndex, in: rawChunk)
+        let matches = regex.matches(in: rawChunk, range: range)
+        guard let match = matches.last,
+              let percentageRange = Range(match.range(at: 1), in: rawChunk),
+              let percentage = Double(rawChunk[percentageRange]) else {
+            return nil
+        }
+
+        return percentage
+    }
+
+    private static func parseCurrentFile(from rawChunk: String) -> String? {
+        let cleanedChunk = rawChunk
+            .replacingOccurrences(of: "\u{8}", with: "")
+            .replacingOccurrences(of: "\r", with: "\n")
+
+        let lines = cleanedChunk
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        let pattern = #"[+\-]\s+(.+)$"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return nil
+        }
+
+        for line in lines.reversed() {
+            let searchRange = NSRange(line.startIndex..<line.endIndex, in: line)
+            guard let match = regex.firstMatch(in: line, range: searchRange),
+                  let valueRange = Range(match.range(at: 1), in: line) else {
+                continue
+            }
+
+            return String(line[valueRange])
+        }
+
+        return nil
     }
 
     /// Parse the technical listing output of `7zz l -slt`.

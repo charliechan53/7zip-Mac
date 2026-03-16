@@ -119,7 +119,6 @@ enum ArchiveFormat: String, CaseIterable, Identifiable {
     case bzip2 = "bzip2"
     case xz = "xz"
     case wim = "wim"
-    case zstd = "zstd"
 
     var id: String { rawValue }
 
@@ -132,7 +131,6 @@ enum ArchiveFormat: String, CaseIterable, Identifiable {
         case .bzip2: return "BZip2"
         case .xz: return "XZ"
         case .wim: return "WIM"
-        case .zstd: return "Zstandard"
         }
     }
 
@@ -145,7 +143,6 @@ enum ArchiveFormat: String, CaseIterable, Identifiable {
         case .bzip2: return "tar.bz2"
         case .xz: return "tar.xz"
         case .wim: return "wim"
-        case .zstd: return "tar.zst"
         }
     }
 
@@ -159,7 +156,6 @@ enum ArchiveFormat: String, CaseIterable, Identifiable {
         case .bzip2: return "bzip2"
         case .xz: return "xz"
         case .wim: return "wim"
-        case .zstd: return "zstd"
         }
     }
 }

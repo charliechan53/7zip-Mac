@@ -56,7 +56,7 @@ fi
 
 # Ask user for format
 FORMAT=$(osascript -e '
-    set formatChoice to choose from list {"7z (Best compression)", "ZIP (Most compatible)", "tar.gz (Unix standard)", "tar.xz (Best tar compression)", "tar.zst (Fast compression)"} with title "7-Zip - Compress" with prompt "Choose archive format:" default items {"7z (Best compression)"}
+    set formatChoice to choose from list {"7z (Best compression)", "ZIP (Most compatible)", "tar.gz (Unix standard)", "tar.xz (Best tar compression)"} with title "7-Zip - Compress" with prompt "Choose archive format:" default items {"7z (Best compression)"}
     if formatChoice is false then
         return "cancelled"
     end if
@@ -84,10 +84,6 @@ case "$FORMAT" in
     "tar.xz"*)
         EXT="tar.xz"
         TYPE_FLAG="xz"
-        ;;
-    "tar.zst"*)
-        EXT="tar.zst"
-        TYPE_FLAG="zstd"
         ;;
     *)
         EXT="7z"

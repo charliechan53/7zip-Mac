@@ -85,7 +85,7 @@ INFOPLIST
                     </array>
                 </dict>
                 <key>AMActionVersion</key>
-                <string>1.0.2</string>
+                <string>1.2</string>
                 <key>AMApplication</key>
                 <array>
                     <string>Automator</string>
@@ -136,7 +136,7 @@ INFOPLIST
                 <key>BundleIdentifier</key>
                 <string>com.apple.RunShellScript</string>
                 <key>CFBundleVersion</key>
-                <string>1.0.2</string>
+                <string>1.2</string>
                 <key>CanShowSelectedItemsWhenRun</key>
                 <false/>
                 <key>CanShowWhenRun</key>

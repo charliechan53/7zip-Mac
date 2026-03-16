@@ -3,6 +3,18 @@ import FinderSync
 import UserNotifications
 
 class FinderSync: FIFinderSync {
+    private var lastSelectedItems: [URL] = []
+    private let actionPasteboardName = NSPasteboard.Name("com.septazip.action")
+    private let actionPasteboardType = NSPasteboard.PasteboardType("com.septazip.action.payload")
+    private let actionNotificationName = Notification.Name("com.septazip.finder-action-posted")
+
+    private struct FinderActionPayload: Codable {
+        let id: String
+        let createdAt: Date
+        let action: String
+        let files: [String]
+        let format: String?
+    }
 
     override init() {
         super.init()
@@ -19,103 +31,127 @@ class FinderSync: FIFinderSync {
 
         let menu = NSMenu(title: "7-Zip")
         let selectedItems = FIFinderSyncController.default().selectedItemURLs() ?? []
+        let selectedFiles = selectedItems.filter { !$0.hasDirectoryPath }
+        lastSelectedItems = selectedItems
 
         if selectedItems.isEmpty { return nil }
 
-        let hasArchives = selectedItems.contains { isArchiveFile($0) }
-        let hasNonArchives = selectedItems.contains { !isArchiveFile($0) }
+        if !selectedFiles.isEmpty {
+            let extractMenu = NSMenu()
 
-        // If archives are selected, show extraction options
-        if hasArchives {
             let extractHere = NSMenuItem(
                 title: "Extract Here",
                 action: #selector(extractHere(_:)),
                 keyEquivalent: ""
             )
-            extractHere.image = NSImage(systemSymbolName: "arrow.down.doc",
-                                         accessibilityDescription: "Extract")
-            menu.addItem(extractHere)
+            extractHere.target = self
+            extractHere.image = menuSymbol(
+                "square.and.arrow.down",
+                description: "Extract Here"
+            )
+            extractMenu.addItem(extractHere)
 
             let extractTo = NSMenuItem(
                 title: "Extract to Subfolder",
                 action: #selector(extractToSubfolder(_:)),
                 keyEquivalent: ""
             )
-            extractTo.image = NSImage(systemSymbolName: "folder.badge.plus",
-                                       accessibilityDescription: "Extract to folder")
-            menu.addItem(extractTo)
+            extractTo.target = self
+            extractTo.image = menuSymbol(
+                "folder.badge.plus",
+                description: "Extract to Subfolder"
+            )
+            extractMenu.addItem(extractTo)
 
             let extractChoose = NSMenuItem(
                 title: "Extract to...",
                 action: #selector(extractToChosen(_:)),
                 keyEquivalent: ""
             )
-            menu.addItem(extractChoose)
+            extractChoose.target = self
+            extractChoose.image = menuSymbol(
+                "ellipsis.circle",
+                description: "Extract to Folder"
+            )
+            extractMenu.addItem(extractChoose)
 
             let openWith = NSMenuItem(
                 title: "Open with 7-Zip",
                 action: #selector(openInApp(_:)),
                 keyEquivalent: ""
             )
-            openWith.image = NSImage(systemSymbolName: "doc.zipper",
-                                      accessibilityDescription: "Open")
-            menu.addItem(openWith)
+            openWith.target = self
+            openWith.image = menuSymbol(
+                "archivebox",
+                description: "Open with 7-Zip"
+            )
+            extractMenu.addItem(openWith)
 
             let testItem = NSMenuItem(
                 title: "Test Archive",
                 action: #selector(testArchive(_:)),
                 keyEquivalent: ""
             )
-            testItem.image = NSImage(systemSymbolName: "checkmark.shield",
-                                      accessibilityDescription: "Test")
-            menu.addItem(testItem)
-        }
-
-        // If non-archive files are selected, show compression options
-        if hasNonArchives || !hasArchives {
-            if hasArchives { menu.addItem(.separator()) }
-
-            // Compress submenu
-            let compressMenu = NSMenu()
-
-            let formats: [(String, String)] = [
-                ("7z", "Compress to .7z"),
-                ("zip", "Compress to .zip"),
-                ("tar.gz", "Compress to .tar.gz"),
-                ("tar.xz", "Compress to .tar.xz"),
-                ("tar.zst", "Compress to .tar.zst"),
-            ]
-
-            for (tag, title) in formats.enumerated() {
-                let item = NSMenuItem(
-                    title: title.1,
-                    action: #selector(compressAs(_:)),
-                    keyEquivalent: ""
-                )
-                item.tag = tag
-                item.representedObject = title.0
-                compressMenu.addItem(item)
-            }
-
-            compressMenu.addItem(.separator())
-
-            let compressCustom = NSMenuItem(
-                title: "Compress with Options...",
-                action: #selector(compressWithOptions(_:)),
-                keyEquivalent: ""
+            testItem.target = self
+            testItem.image = menuSymbol(
+                "checkmark.shield",
+                description: "Test Archive"
             )
-            compressMenu.addItem(compressCustom)
+            extractMenu.addItem(testItem)
 
-            let compressItem = NSMenuItem(
-                title: "Compress with 7-Zip",
+            let extractRoot = NSMenuItem(
+                title: "Decompress with 7-Zip",
                 action: nil,
                 keyEquivalent: ""
             )
-            compressItem.submenu = compressMenu
-            compressItem.image = NSImage(systemSymbolName: "arrow.up.doc",
-                                          accessibilityDescription: "Compress")
-            menu.addItem(compressItem)
+            extractRoot.submenu = extractMenu
+            extractRoot.image = menuSymbol(
+                "tray.and.arrow.down",
+                description: "Decompress with 7-Zip"
+            )
+            menu.addItem(extractRoot)
         }
+
+        // Always offer compression for the current selection.
+        let compressMenu = NSMenu()
+
+        let formats: [(String, String)] = [
+            ("7z", "Compress to .7z"),
+            ("zip", "Compress to .zip"),
+            ("tar.gz", "Compress to .tar.gz"),
+            ("tar.xz", "Compress to .tar.xz"),
+        ]
+
+        for (tag, title) in formats.enumerated() {
+            let item = NSMenuItem(
+                title: title.1,
+                action: #selector(compressAs(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.tag = tag
+            compressMenu.addItem(item)
+        }
+
+        let compressCustom = NSMenuItem(
+            title: "Compress with Options...",
+            action: #selector(compressWithOptions(_:)),
+            keyEquivalent: ""
+        )
+        compressCustom.target = self
+        compressMenu.addItem(compressCustom)
+
+        let compressItem = NSMenuItem(
+            title: "Compress with 7-Zip",
+            action: nil,
+            keyEquivalent: ""
+        )
+        compressItem.submenu = compressMenu
+        compressItem.image = menuSymbol(
+            "tray.and.arrow.up",
+            description: "Compress with 7-Zip"
+        )
+        menu.addItem(compressItem)
 
         return menu
     }
@@ -123,207 +159,139 @@ class FinderSync: FIFinderSync {
     // MARK: - Actions
 
     @objc func extractHere(_ sender: NSMenuItem) {
-        let urls = FIFinderSyncController.default().selectedItemURLs() ?? []
-        for url in urls where isArchiveFile(url) {
-            let dir = url.deletingLastPathComponent().path
-            run7zz(args: ["x", "-o\(dir)", "-aoa", url.path])
-        }
+        openMainApp(action: "extractHere", urls: selectedFileURLs())
     }
 
     @objc func extractToSubfolder(_ sender: NSMenuItem) {
-        let urls = FIFinderSyncController.default().selectedItemURLs() ?? []
-        for url in urls where isArchiveFile(url) {
-            let dir = url.deletingLastPathComponent().path
-            let name = url.deletingPathExtension().lastPathComponent
-            let dest = "\(dir)/\(name)"
-            try? FileManager.default.createDirectory(atPath: dest,
-                                                      withIntermediateDirectories: true)
-            run7zz(args: ["x", "-o\(dest)", "-aoa", url.path])
-        }
+        openMainApp(action: "extractToSubfolder", urls: selectedFileURLs())
     }
 
     @objc func extractToChosen(_ sender: NSMenuItem) {
-        let urls = FIFinderSyncController.default().selectedItemURLs() ?? []
-        guard let firstArchive = urls.first(where: { isArchiveFile($0) }) else { return }
-
-        // Open the main app with extract intent
-        openMainApp(action: "extract", files: [firstArchive.path])
+        guard let firstArchive = selectedFileURLs().first else { return }
+        openMainApp(action: "extract", urls: [firstArchive])
     }
 
     @objc func openInApp(_ sender: NSMenuItem) {
-        let urls = FIFinderSyncController.default().selectedItemURLs() ?? []
-        let paths = urls.filter { isArchiveFile($0) }.map { $0.path }
-        openMainApp(action: "open", files: paths)
+        guard let firstFile = selectedFileURLs().first else { return }
+        openMainApp(action: "open", urls: [firstFile])
     }
 
     @objc func testArchive(_ sender: NSMenuItem) {
-        let urls = FIFinderSyncController.default().selectedItemURLs() ?? []
-        for url in urls where isArchiveFile(url) {
-            run7zz(args: ["t", url.path])
-        }
+        openMainApp(action: "test", urls: selectedFileURLs())
     }
 
     @objc func compressAs(_ sender: NSMenuItem) {
-        let urls = FIFinderSyncController.default().selectedItemURLs() ?? []
+        let urls = selectedItemURLs()
         guard !urls.isEmpty else { return }
-        let ext = sender.representedObject as? String ?? "7z"
-
-        let baseName: String
-        if urls.count == 1 {
-            baseName = urls[0].deletingPathExtension().lastPathComponent
-        } else {
-            baseName = "Archive"
+        let ext: String
+        switch sender.tag {
+        case 0:
+            ext = "7z"
+        case 1:
+            ext = "zip"
+        case 2:
+            ext = "tar.gz"
+        case 3:
+            ext = "tar.xz"
+        default:
+            ext = "7z"
         }
-
-        let dir = urls[0].deletingLastPathComponent().path
-        let outputPath = "\(dir)/\(baseName).\(ext)"
-
-        let formatFlag: String
-        switch ext {
-        case "7z": formatFlag = "7z"
-        case "zip": formatFlag = "zip"
-        case "tar.gz": formatFlag = "gzip"
-        case "tar.xz": formatFlag = "xz"
-        case "tar.zst": formatFlag = "zstd"
-        default: formatFlag = "7z"
-        }
-
-        var args = ["a", "-t\(formatFlag)", outputPath]
-        args.append(contentsOf: urls.map { $0.path })
-        run7zz(args: args)
+        openMainApp(action: "compressDirect", urls: urls, format: ext)
     }
 
     @objc func compressWithOptions(_ sender: NSMenuItem) {
-        let urls = FIFinderSyncController.default().selectedItemURLs() ?? []
-        let paths = urls.map { $0.path }
-        openMainApp(action: "compress", files: paths)
+        let urls = selectedItemURLs()
+        openMainApp(action: "compress", urls: urls)
     }
 
     // MARK: - Helpers
 
-    private func isArchiveFile(_ url: URL) -> Bool {
-        let archiveExtensions: Set<String> = [
-            "7z", "zip", "rar", "tar", "gz", "bz2", "xz", "zst",
-            "iso", "dmg", "wim", "cab", "arj", "lzh", "lzma",
-            "rpm", "deb", "cpio", "cramfs", "squashfs", "vhd",
-            "vhdx", "vmdk", "qcow", "qcow2", "vdi"
-        ]
-        return archiveExtensions.contains(url.pathExtension.lowercased())
+    private func selectedFileURLs() -> [URL] {
+        selectedItemURLs().filter { !$0.hasDirectoryPath }
     }
 
-    private func find7zz() -> String? {
-        // In the extension, walk back up from:
-        // App.app/Contents/PlugIns/Extension.appex -> App.app/Contents/Resources/7zz
-        let bundleURL = Bundle.main.bundleURL
-        let appResourcesURL = bundleURL
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("Resources", isDirectory: true)
-            .appendingPathComponent("7zz", isDirectory: false)
-
-        if FileManager.default.isExecutableFile(atPath: appResourcesURL.path) {
-            return appResourcesURL.path
+    private func selectedItemURLs() -> [URL] {
+        let currentSelection = FIFinderSyncController.default().selectedItemURLs() ?? []
+        if currentSelection.isEmpty {
+            return lastSelectedItems
         }
+        return currentSelection
+    }
 
-        #if DEBUG
-        let allowExternalFallbacks = true
-        #else
-        let allowExternalFallbacks = ProcessInfo.processInfo.environment["SEPTAZIP_ALLOW_EXTERNAL_7ZZ"] == "1"
-        #endif
-
-        guard allowExternalFallbacks else {
+    private func menuSymbol(_ systemName: String, description: String) -> NSImage? {
+        let baseImage = NSImage(
+            systemSymbolName: systemName,
+            accessibilityDescription: description
+        )
+        let sizeConfiguration = NSImage.SymbolConfiguration(
+            pointSize: 15,
+            weight: .regular,
+            scale: .medium
+        )
+        let monochromeConfiguration = NSImage.SymbolConfiguration.preferringMonochrome()
+        let configuration = sizeConfiguration.applying(monochromeConfiguration)
+        guard let symbolImage = (baseImage?.withSymbolConfiguration(configuration) ?? baseImage) else {
             return nil
         }
 
-        let fallbacks = [
-            "/usr/local/bin/7zz",
-            "/opt/homebrew/bin/7zz",
-            "\(NSHomeDirectory())/.local/bin/7zz"
-        ]
-        for path in fallbacks {
-            if FileManager.default.isExecutableFile(atPath: path) {
-                return path
-            }
-        }
-        return nil
-    }
-
-    private func run7zz(args: [String]) {
-        guard let binary = find7zz() else {
-            showNotification(title: "7-Zip Error",
-                           message: "7zz binary not found. Please open the 7-Zip app first.")
-            return
-        }
-
-        DispatchQueue.global(qos: .userInitiated).async {
-            let process = Process()
-            let errorPipe = Pipe()
-            let errorHandle = errorPipe.fileHandleForReading
-            let lock = NSLock()
-            var errorData = Data()
-
-            process.executableURL = URL(fileURLWithPath: binary)
-            process.arguments = args
-            process.standardOutput = FileHandle.nullDevice
-            process.standardError = errorPipe
-
-            errorHandle.readabilityHandler = { handle in
-                let chunk = handle.availableData
-                guard !chunk.isEmpty else { return }
-                lock.lock()
-                errorData.append(chunk)
-                lock.unlock()
-            }
-
-            do {
-                try process.run()
-                process.waitUntilExit()
-                errorHandle.readabilityHandler = nil
-
-                let trailingError = errorHandle.readDataToEndOfFile()
-                lock.lock()
-                errorData.append(trailingError)
-                let errorMsg = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-                lock.unlock()
-
-                if process.terminationStatus <= 1 {
-                    self.showNotification(title: "7-Zip",
-                                        message: "Operation completed successfully.")
-                } else {
-                    self.showNotification(title: "7-Zip Error",
-                                        message: errorMsg.prefix(200).description)
-                }
-            } catch {
-                errorHandle.readabilityHandler = nil
-                self.showNotification(title: "7-Zip Error",
-                                    message: error.localizedDescription)
-            }
+        let imageSize = NSSize(width: 16, height: 16)
+        return NSImage(size: imageSize, flipped: false) { rect in
+            let targetRect = rect.insetBy(dx: 0.5, dy: 0.5)
+            symbolImage.draw(
+                in: targetRect,
+                from: .zero,
+                operation: .copy,
+                fraction: 1
+            )
+            NSColor.labelColor.setFill()
+            targetRect.fill(using: .sourceIn)
+            return true
         }
     }
 
-    private func openMainApp(action: String, files: [String]) {
+    private func hostApplicationURL() -> URL {
+        Bundle.main.bundleURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+    }
+
+    private func openMainApp(action: String, urls: [URL], format: String? = nil) {
+        guard !urls.isEmpty else { return }
+
         let appBundleId = "com.septazip.SeptaZip"
         let workspace = NSWorkspace.shared
+        let filePaths = urls.map(\.path)
+        let payload = FinderActionPayload(
+            id: UUID().uuidString,
+            createdAt: Date(),
+            action: action,
+            files: filePaths,
+            format: format
+        )
 
-        // Pass files via pasteboard with a custom type
-        let pb = NSPasteboard(name: NSPasteboard.Name("com.septazip.action"))
-        pb.clearContents()
-        let data = try? JSONEncoder().encode(["action": action, "files": files.joined(separator: "\n")])
-        if let data = data {
-            pb.setData(data, forType: .string)
-        }
+        let pb = NSPasteboard(name: actionPasteboardName)
+        var queuedPayloads = readQueuedPayloads(from: pb)
+        queuedPayloads.append(payload)
+        writeQueuedPayloads(queuedPayloads, to: pb)
 
-        // Open the main app
-        if let appURL = workspace.urlForApplication(withBundleIdentifier: appBundleId) {
-            let config = NSWorkspace.OpenConfiguration()
-            config.activates = true
-            let fileURLs = files.map { URL(fileURLWithPath: $0) }
-            workspace.open(fileURLs, withApplicationAt: appURL,
-                          configuration: config) { _, error in
-                if let error = error {
-                    self.showNotification(title: "7-Zip Error",
-                                        message: "Failed to open app: \(error.localizedDescription)")
-                }
+        DistributedNotificationCenter.default().postNotificationName(
+            actionNotificationName,
+            object: nil,
+            userInfo: notificationUserInfo(for: payload),
+            deliverImmediately: true
+        )
+
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = shouldActivateApp(for: action)
+        let appURL = workspace.urlForApplication(withBundleIdentifier: appBundleId) ?? hostApplicationURL()
+
+        workspace.openApplication(at: appURL, configuration: config) { _, error in
+            if let error {
+                self.showNotification(
+                    title: "7-Zip Error",
+                    message: "Failed to open app: \(error.localizedDescription)"
+                )
             }
         }
     }
@@ -338,5 +306,52 @@ class FinderSync: FIFinderSync {
             trigger: nil
         )
         UNUserNotificationCenter.current().add(request)
+    }
+
+    private func readQueuedPayloads(from pasteboard: NSPasteboard) -> [FinderActionPayload] {
+        guard let data = pasteboard.data(forType: actionPasteboardType) else {
+            return []
+        }
+
+        if let payloads = try? JSONDecoder().decode([FinderActionPayload].self, from: data) {
+            return payloads
+        }
+
+        if let payload = try? JSONDecoder().decode(FinderActionPayload.self, from: data) {
+            return [payload]
+        }
+
+        return []
+    }
+
+    private func writeQueuedPayloads(_ payloads: [FinderActionPayload], to pasteboard: NSPasteboard) {
+        pasteboard.clearContents()
+        guard !payloads.isEmpty,
+              let data = try? JSONEncoder().encode(payloads) else {
+            return
+        }
+        pasteboard.setData(data, forType: actionPasteboardType)
+    }
+
+    private func notificationUserInfo(for payload: FinderActionPayload) -> [AnyHashable: Any] {
+        var info: [AnyHashable: Any] = [
+            "id": payload.id,
+            "createdAt": payload.createdAt.timeIntervalSince1970,
+            "action": payload.action,
+            "files": payload.files
+        ]
+        if let format = payload.format {
+            info["format"] = format
+        }
+        return info
+    }
+
+    private func shouldActivateApp(for action: String) -> Bool {
+        switch action {
+        case "open", "extract", "compress":
+            return true
+        default:
+            return false
+        }
     }
 }

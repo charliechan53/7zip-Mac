@@ -1,4 +1,4 @@
-# SeptaZip v1.1.0
+# SeptaZip v1.2
 
 Native macOS archive manager powered by the official 7-Zip engine.
 
@@ -13,8 +13,8 @@ Native macOS archive manager powered by the official 7-Zip engine.
 
 ## Download
 
-- Download `SeptaZip-1.1.0.dmg`
-- Verify it with `SeptaZip-1.1.0.dmg.sha256`
+- Download `SeptaZip-1.2.dmg`
+- Verify it with `SeptaZip-1.2.dmg.sha256`
 
 ## Install
 

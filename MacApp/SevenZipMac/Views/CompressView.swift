@@ -147,10 +147,24 @@ struct CompressView: View {
             // Action buttons
             HStack {
                 if isCompressing {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                    Text("Compressing...")
-                        .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 6) {
+                        if let progress = archiveManager.progress {
+                            ProgressView(value: progress.percentage, total: 100)
+                                .frame(width: 180)
+                            Text("Compressing... \(Int(progress.percentage.rounded()))%")
+                                .foregroundColor(.secondary)
+                            Text(progress.currentFile)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        } else {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                            Text("Compressing...")
+                                .foregroundColor(.secondary)
+                        }
+                    }
                 }
 
                 Spacer()
