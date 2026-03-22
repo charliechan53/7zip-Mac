@@ -460,7 +460,15 @@ private struct BackgroundArchiveJobsPanelView: View {
         }
         .padding(16)
         .frame(width: 340, alignment: .leading)
-        .background(.regularMaterial)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.regularMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(.white.opacity(0.1), lineWidth: 1)
+        )
+        .padding(8)
     }
 }
 
@@ -535,7 +543,7 @@ private final class BackgroundArchiveJobsPanelController {
     func present(using manager: BackgroundArchiveJobManager, forceVisible: Bool = false) {
         let jobs = manager.visibleJobs
         guard forceVisible || !jobs.isEmpty else {
-            panel?.orderOut(nil)
+            teardownPanel()
             return
         }
 
@@ -552,7 +560,13 @@ private final class BackgroundArchiveJobsPanelController {
     }
 
     func hide() {
+        teardownPanel()
+    }
+
+    private func teardownPanel() {
         panel?.orderOut(nil)
+        panel?.close()
+        panel = nil
     }
 
     private func makePanel() -> NSPanel {
@@ -566,6 +580,9 @@ private final class BackgroundArchiveJobsPanelController {
         panel.isMovable = true
         panel.isMovableByWindowBackground = true
         panel.level = .statusBar
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
         // `canJoinAllSpaces` and `moveToActiveSpace` are mutually exclusive on newer macOS.
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.hidesOnDeactivate = false
