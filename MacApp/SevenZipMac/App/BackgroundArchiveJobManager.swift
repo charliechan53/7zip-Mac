@@ -128,7 +128,7 @@ final class BackgroundArchiveJobManager: ObservableObject {
     @Published private(set) var jobs: [BackgroundArchiveJob] = []
     @Published private(set) var isPanelManuallyHidden = false
 
-    private let completionRetention: TimeInterval = 8
+    private let completionRetention: TimeInterval = 4
 
     private init() {}
 
@@ -282,20 +282,18 @@ final class BackgroundArchiveJobManager: ObservableObject {
         pruneFinishedJobs()
         if !isPanelManuallyHidden {
             BackgroundArchiveJobsPanelController.shared.present(using: self)
-        } else if visibleJobs.isEmpty {
-            // Once all jobs are gone, reset manual hide for the next job cycle.
-            isPanelManuallyHidden = false
         }
 
         Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(completionRetention * 1_000_000_000))
-            self?.pruneFinishedJobs()
-            if let self {
-                if !self.isPanelManuallyHidden {
-                    BackgroundArchiveJobsPanelController.shared.present(using: self)
-                } else if self.visibleJobs.isEmpty {
-                    self.isPanelManuallyHidden = false
-                }
+            guard let self else { return }
+            try? await Task.sleep(nanoseconds: UInt64(self.completionRetention * 1_000_000_000))
+            self.pruneFinishedJobs()
+            if !self.isPanelManuallyHidden {
+                BackgroundArchiveJobsPanelController.shared.present(using: self)
+            }
+            if self.visibleJobs.isEmpty {
+                // Reset hide preference between job cycles.
+                self.isPanelManuallyHidden = false
             }
         }
     }
@@ -308,6 +306,9 @@ final class BackgroundArchiveJobManager: ObservableObject {
             }
             guard let finishedAt = job.finishedAt else { return false }
             return now.timeIntervalSince(finishedAt) <= completionRetention
+        }
+        if jobs.isEmpty {
+            BackgroundArchiveJobsPanelController.shared.hide()
         }
     }
 
@@ -458,17 +459,16 @@ private struct BackgroundArchiveJobsPanelView: View {
                 }
             }
         }
-        .padding(16)
+        .padding(14)
         .frame(width: 340, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.regularMaterial)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(nsColor: .windowBackgroundColor))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(.white.opacity(0.1), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
         )
-        .padding(8)
     }
 }
 
@@ -580,14 +580,15 @@ private final class BackgroundArchiveJobsPanelController {
         panel.isMovable = true
         panel.isMovableByWindowBackground = true
         panel.level = .statusBar
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = false
-        // `canJoinAllSpaces` and `moveToActiveSpace` are mutually exclusive on newer macOS.
+        panel.isOpaque = true
+        panel.backgroundColor = .windowBackgroundColor
+        panel.hasShadow = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.hidesOnDeactivate = false
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
+        panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        panel.standardWindowButton(.zoomButton)?.isHidden = true
         panel.setFrameAutosaveName("SeptaZipJobsPanelFrame")
         panel.setFrameUsingName("SeptaZipJobsPanelFrame", force: false)
         self.panel = panel
